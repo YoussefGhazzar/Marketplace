@@ -1,0 +1,19 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Georgia', serif;
+}
+
+body {
+    background-color: #fff5f8;
+    color: #333;
+}
+
+:root {
+    --rose-fonce: #8b1a4a;
+    --rose-vif: #c2185b;
+    --rose-clair: #f8bbd0;
+    --rose-clair2: #f48fb1;
+    --rose-moyen: #f06292;
+}
