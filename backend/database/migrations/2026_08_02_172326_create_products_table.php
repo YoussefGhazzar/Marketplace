@@ -7,35 +7,22 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('products', function (Blueprint $table) {
-            $table->string('name');
+        Schema::create('products', function (Blueprint $table) {
+            $table->id();
+            $table->string('nom');
             $table->longText('description')->nullable();
-            $table->string('category');
-            $table->decimal('price', 10, 2);
-            $table->enum('condition', ['Neuf', 'Utilisé']);
-            $table->boolean('bio')->default(false);
-            $table->integer('quantity')->default(0);
-
-            $table->foreignId('seller_id')
-                  ->constrained('users')
-                  ->onDelete('cascade');
+            $table->string('categorie');
+            $table->decimal('prix', 10, 2);
+            $table->string('nom_vendeuse');
+            $table->string('type_vendeur');
+            $table->string('type_offre');
+            $table->string('photo')->nullable();
+            $table->timestamps();
         });
     }
 
     public function down(): void
     {
-        Schema::table('products', function (Blueprint $table) {
-            $table->dropForeign(['seller_id']);
-            $table->dropColumn([
-                'name',
-                'description',
-                'category',
-                'price',
-                'condition',
-                'bio',
-                'quantity',
-                'seller_id'
-            ]);
-        });
+        Schema::dropIfExists('products');
     }
 };

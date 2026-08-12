@@ -60,7 +60,7 @@
           <img 
             :src="item.isCustom ? item.photo : getImageUrl(item.image)" 
             :alt="item.nom"
-            @error="(e) => e.target.src = 'https://via.placeholder.com/220x180?text=Produit'"
+            @error="(e) => e.target.src = 'data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'220\' height=\'180\' viewBox=\'0 0 220 180\'><rect width=\'100%\' height=\'100%\' fill=\'%23ffeaf0\'/><text x=\'50%\' y=\'50%\' dominant-baseline=\'middle\' text-anchor=\'middle\' font-family=\'sans-serif\' font-size=\'16\' fill=\'%23c2185b\'>Produit</text></svg>'"
           />
           <div class="info">
             <h3>{{ item.nom }}</h3>
@@ -70,6 +70,7 @@
           </div>
           <div class="card-buttons">
             <button 
+              v-if="item.typeOffre !== 'Echange uniquement'"
               class="btn-acheter" 
               :class="{ 'added': articlesAjoutes[`${item.id}-acheter`] }"
               @click="ajouterAuPanier(item, 'acheter')"
@@ -77,6 +78,7 @@
               {{ articlesAjoutes[`${item.id}-acheter`] ? '✓ Ajouté!' : 'Acheter' }}
             </button>
             <button 
+              v-if="item.typeOffre !== 'Vente uniquement'"
               class="btn-echanger" 
               :class="{ 'added': articlesAjoutes[`${item.id}-echanger`] }"
               @click="ajouterAuPanier(item, 'echanger')"
@@ -101,6 +103,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import Navbar from '../components/Navbar.vue'
 import Footer from '../components/Footer.vue'
+import api from '../services/axios.js'
 
 import soinsImg from '../images/soins.png.jpeg'
 import artisanatImg from '../images/artisanats.png.jpeg'
@@ -202,8 +205,24 @@ const getImageUrl = (name) => {
   return new URL(`../images/${name}`, import.meta.url).href
 }
 
-const chargerCustomProducts = () => {
-  customProducts.value = JSON.parse(localStorage.getItem('produits_publies')) || []
+const chargerCustomProducts = async () => {
+  try {
+    const response = await api.get('/products')
+    customProducts.value = response.data.map(p => ({
+      id: p.id,
+      nomVendeuse: p.nom_vendeuse,
+      typeVendeur: p.type_vendeur,
+      nom: p.nom,
+      categorie: p.categorie,
+      prix: p.prix,
+      description: p.description,
+      typeOffre: p.type_offre,
+      photo: p.photo_url || p.photo
+    }))
+  } catch (error) {
+    console.error('Error fetching custom products from backend:', error)
+    customProducts.value = JSON.parse(localStorage.getItem('produits_publies')) || []
+  }
 }
 
 const allProducts = computed(() => {
@@ -224,7 +243,8 @@ const allProducts = computed(() => {
       tag: p.categorie,
       prix: `${p.prix} DH`,
       photo: p.photo,
-      isCustom: true
+      isCustom: true,
+      typeOffre: p.typeOffre
     }))
     list = [...customSoins, ...list]
   } else if (currentRoute.value === 'artisanat') {
@@ -242,7 +262,8 @@ const allProducts = computed(() => {
       tag: p.categorie,
       prix: `${p.prix} DH`,
       photo: p.photo,
-      isCustom: true
+      isCustom: true,
+      typeOffre: p.typeOffre
     }))
     list = [...customArtisanat, ...list]
   }
@@ -278,6 +299,7 @@ const ajouterAuPanier = (item, type) => {
   
   const produitPanier = {
     id: Date.now() + Math.random(),
+    productId: item.id,
     nom: item.nom,
     vendeur: item.vendeur,
     prix: item.prix,

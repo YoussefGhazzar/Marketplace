@@ -145,8 +145,8 @@
           </div>
         </div>
 
-        <button type="submit" class="btn-submit">
-          <span>Publier le produit</span>
+        <button type="submit" class="btn-submit" :disabled="loading">
+          <span>{{ loading ? 'Publication...' : 'Publier le produit' }}</span>
         </button>
       </form>
 
@@ -154,6 +154,13 @@
         <div v-if="afficherSucces" class="success-msg">
           <span class="success-icon">✓</span>
           Votre produit a été publié avec succès !
+        </div>
+      </Transition>
+
+      <Transition name="fade-slide">
+        <div v-if="errorMsg" class="error-msg">
+          <span class="error-icon">✕</span>
+          {{ errorMsg }}
         </div>
       </Transition>
     </div>
@@ -166,6 +173,7 @@
 import { ref, reactive } from 'vue'
 import Navbar from '../components/Navbar.vue'
 import Footer from '../components/Footer.vue'
+import api from '../services/axios.js'
 
 const produitInitial = {
   nomVendeuse: '',
@@ -193,6 +201,8 @@ const fileInput = ref(null)
 const isDragOver = ref(false)
 const photoPreview = ref(null)
 const afficherSucces = ref(false)
+const loading = ref(false)
+const errorMsg = ref('')
 
 const validerChamp = (champ) => {
   if (champ === 'nomVendeuse') {
@@ -273,32 +283,59 @@ const resetForm = () => {
   Object.keys(errors).forEach(key => errors[key] = '')
 }
 
-const soumettre = () => {
+const soumettre = async () => {
   if (validerFormulaire()) {
-    // Add product locally so that it mocks persistence
-    const publishedProducts = JSON.parse(localStorage.getItem('produits_publies')) || []
-    publishedProducts.push({
-      id: Date.now(),
-      nomVendeuse: produit.value.nomVendeuse,
-      typeVendeur: produit.value.typeVendeur,
-      nom: produit.value.nom,
-      categorie: produit.value.categorie,
-      prix: produit.value.prix,
-      description: produit.value.description,
-      typeOffre: produit.value.typeOffre,
-      photo: photoPreview.value // Stock local Base64 representation of image for rendering
-    })
-    localStorage.setItem('produits_publies', JSON.stringify(publishedProducts))
+    loading.value = true
+    errorMsg.value = ''
+    try {
+      const formData = new FormData()
+      formData.append('nomVendeuse', produit.value.nomVendeuse)
+      formData.append('typeVendeur', produit.value.typeVendeur)
+      formData.append('nom', produit.value.nom)
+      formData.append('categorie', produit.value.categorie)
+      formData.append('prix', produit.value.prix)
+      formData.append('description', produit.value.description)
+      formData.append('typeOffre', produit.value.typeOffre)
+      if (produit.value.photo) {
+        formData.append('photo', produit.value.photo)
+      }
 
-    // Dispatches a custom event to notify other components if they are listening to the products
-    window.dispatchEvent(new Event('produits-mis-a-jour'))
+      const response = await api.post('/products', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      })
 
-    afficherSucces.value = true
-    resetForm()
-    
-    setTimeout(() => {
-      afficherSucces.value = false
-    }, 4500)
+      // Update local storage too so offline/other components stay in sync
+      const publishedProducts = JSON.parse(localStorage.getItem('produits_publies')) || []
+      const newProduct = response.data.product
+      publishedProducts.push({
+        id: newProduct.id,
+        nomVendeuse: newProduct.nom_vendeuse,
+        typeVendeur: newProduct.type_vendeur,
+        nom: newProduct.nom,
+        categorie: newProduct.categorie,
+        prix: newProduct.prix,
+        description: newProduct.description,
+        typeOffre: newProduct.type_offre,
+        photo: newProduct.photo_url || photoPreview.value
+      })
+      localStorage.setItem('produits_publies', JSON.stringify(publishedProducts))
+
+      window.dispatchEvent(new Event('produits-mis-a-jour'))
+
+      afficherSucces.value = true
+      resetForm()
+      
+      setTimeout(() => {
+        afficherSucces.value = false
+      }, 4500)
+    } catch (error) {
+      errorMsg.value = error.response?.data?.message || "Une erreur est survenue lors de la publication du produit."
+      console.error('Error publishing product:', error)
+    } finally {
+      loading.value = false
+    }
   }
 }
 </script>
@@ -569,6 +606,33 @@ const soumettre = () => {
 .success-icon {
   font-weight: bold;
   font-size: 18px;
+}
+
+/* Error Message */
+.error-msg {
+  background: #fde8e8;
+  color: #c62828;
+  padding: 15px;
+  border-radius: 10px;
+  text-align: center;
+  font-size: 15px;
+  margin-top: 20px;
+  font-family: 'Georgia', serif;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 4px 12px rgba(198, 40, 40, 0.1);
+}
+
+.error-icon {
+  font-weight: bold;
+  font-size: 18px;
+}
+
+.btn-submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* Transitions */

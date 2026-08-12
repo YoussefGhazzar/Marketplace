@@ -101,12 +101,20 @@
             <span v-if="errors.message" class="error-text">{{ errors.message }}</span>
           </div>
 
-          <button type="submit" class="btn-submit">Envoyer le message</button>
+          <button type="submit" class="btn-submit" :disabled="loading">
+            {{ loading ? 'Envoi...' : 'Envoyer le message' }}
+          </button>
         </form>
 
         <Transition name="fade-slide">
           <div v-if="afficherSucces" class="success-msg">
             Message envoyé avec succès ! Nous vous répondrons bientôt.
+          </div>
+        </Transition>
+
+        <Transition name="fade-slide">
+          <div v-if="errorMsg" class="error-msg">
+            {{ errorMsg }}
           </div>
         </Transition>
       </div>
@@ -120,6 +128,10 @@
 import { ref, reactive } from 'vue'
 import Navbar from '../components/Navbar.vue'
 import Footer from '../components/Footer.vue'
+import api from '../services/axios.js'
+
+const loading = ref(false)
+const errorMsg = ref('')
 
 const formInitial = {
   nomComplet: '',
@@ -175,13 +187,29 @@ const resetForm = () => {
   Object.keys(errors).forEach(key => errors[key] = '')
 }
 
-const envoyer = () => {
+const envoyer = async () => {
   if (validerFormulaire()) {
-    afficherSucces.value = true
-    resetForm()
-    setTimeout(() => {
-      afficherSucces.value = false
-    }, 4500)
+    loading.value = true
+    errorMsg.value = ''
+    try {
+      await api.post('/contact', {
+        nomComplet: form.value.nomComplet,
+        email: form.value.email,
+        sujet: form.value.sujet,
+        message: form.value.message
+      })
+      
+      afficherSucces.value = true
+      resetForm()
+      setTimeout(() => {
+        afficherSucces.value = false
+      }, 4500)
+    } catch (error) {
+      errorMsg.value = error.response?.data?.message || "Une erreur est survenue lors de l'envoi du message."
+      console.error('Contact submit error:', error)
+    } finally {
+      loading.value = false
+    }
   }
 }
 </script>
@@ -404,6 +432,23 @@ const envoyer = () => {
   margin-top: 15px;
   font-family: 'Georgia', serif;
   box-shadow: 0 4px 12px rgba(46, 125, 50, 0.1);
+}
+
+.error-msg {
+  background: #fde8e8;
+  color: #c62828;
+  padding: 15px;
+  border-radius: 10px;
+  text-align: center;
+  font-size: 15px;
+  margin-top: 15px;
+  font-family: 'Georgia', serif;
+  box-shadow: 0 4px 12px rgba(198, 40, 40, 0.1);
+}
+
+.btn-submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* Transitions */

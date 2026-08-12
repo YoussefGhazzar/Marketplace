@@ -12,23 +12,22 @@ class Product extends Model
     protected $table = 'products';
 
     protected $fillable = [
-        'name',
+        'nom',
         'description',
-        'category',
-        'price',
-        'condition',
-        'bio',
-        'quantity',
-        'seller_id',
+        'categorie',
+        'prix',
+        'nom_vendeuse',
+        'type_vendeur',
+        'type_offre',
+        'photo',
     ];
 
     protected $casts = [
-        'bio' => 'boolean',
-        'price' => 'decimal:2',
+        'prix' => 'decimal:2',
     ];
 
-    public function seller()
+    public function orderItems()
     {
-        return $this->belongsTo(User::class, 'seller_id');
+        return $this->hasMany(OrderItem::class, 'product_id');
     }
 }

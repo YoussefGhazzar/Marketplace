@@ -73,7 +73,7 @@
             <img 
               :src="item.image" 
               :alt="item.nom"
-              @error="(e) => e.target.src = 'https://via.placeholder.com/220x175?text=Image'"
+              @error="(e) => e.target.src = 'data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'220\' height=\'175\' viewBox=\'0 0 220 175\'><rect width=\'100%\' height=\'100%\' fill=\'%23ffeaf0\'/><text x=\'50%\' y=\'50%\' dominant-baseline=\'middle\' text-anchor=\'middle\' font-family=\'sans-serif\' font-size=\'16\' fill=\'%23c2185b\'>Image</text></svg>'"
             />
             <div class="info">
               <h3>{{ item.nom }}</h3>
@@ -94,15 +94,21 @@
               <span v-else-if="activeTab === 'echanger'">Total échanges :</span>
               <span v-else>Total :</span>
             </span>
-            <span class="total-prix">{{ totalPrix }} DH</span>
+            <span class="total-prix">
+              <span v-if="activeTab === 'echanger'">{{ articlesFiltres.length }} article(s)</span>
+              <span v-else>{{ totalPrix }} DH</span>
+            </span>
           </div>
           
-          <div v-if="activeTab === 'tous'" class="actions-wrapper">
-            <button class="btn-confirmer" @click="confirmerCommande">
-              ✅ Confirmer la commande
+          <div class="actions-wrapper">
+            <button class="btn-confirmer" @click="confirmerCommande" :disabled="loading">
+              <span v-if="activeTab === 'echanger'">{{ loading ? 'Confirmation...' : '🔄 Confirmer l\'échange' }}</span>
+              <span v-else>{{ loading ? 'Confirmation...' : '✅ Confirmer la commande' }}</span>
             </button>
             <button class="btn-vider" @click="viderPanier">
-              🗑️ Vider le panier
+              <span v-if="activeTab === 'acheter'">🗑️ Vider les achats</span>
+              <span v-else-if="activeTab === 'echanger'">🗑️ Vider les échanges</span>
+              <span v-else>🗑️ Vider le panier</span>
             </button>
           </div>
         </div>
@@ -116,6 +122,13 @@
       </div>
     </Transition>
 
+    <!-- Error message toast -->
+    <Transition name="toast">
+      <div v-if="errorMsg" class="error-toast">
+        ❌ {{ errorMsg }}
+      </div>
+    </Transition>
+
     <Footer />
   </div>
 </template>
@@ -124,10 +137,13 @@
 import { ref, computed, onMounted } from 'vue'
 import Navbar from '../components/Navbar.vue'
 import Footer from '../components/Footer.vue'
+import api from '../services/axios.js'
 
 const articles = ref([])
 const activeTab = ref('tous')
 const afficherSucces = ref(false)
+const loading = ref(false)
+const errorMsg = ref('')
 
 const chargerPanier = () => {
   articles.value = JSON.parse(localStorage.getItem('panier')) || []
@@ -147,9 +163,11 @@ const articlesFiltres = computed(() => {
 const totalPrix = computed(() => {
   let total = 0
   articlesFiltres.value.forEach(art => {
-    const matched = art.prix.match(/\d+/)
-    if (matched) {
-      total += parseInt(matched[0], 10)
+    if (art.type === 'acheter') {
+      const matched = art.prix.match(/\d+/)
+      if (matched) {
+        total += parseInt(matched[0], 10)
+      }
     }
   })
   return total
@@ -166,23 +184,68 @@ const supprimerArticle = (id) => {
 }
 
 const viderPanier = () => {
-  if (confirm('Vider tout le panier ?')) {
-    articles.value = []
-    localStorage.removeItem('panier')
+  const message = activeTab.value === 'acheter' 
+    ? 'Vider tous les articles à acheter ?' 
+    : (activeTab.value === 'echanger' ? 'Vider tous les articles à échanger ?' : 'Vider tout le panier ?')
+    
+  if (confirm(message)) {
+    const filteredIds = new Set(articlesFiltres.value.map(art => art.id))
+    articles.value = articles.value.filter(art => !filteredIds.has(art.id))
+    localStorage.setItem('panier', JSON.stringify(articles.value))
     chargerPanier()
   }
 }
 
-const confirmerCommande = () => {
-  localStorage.removeItem('panier')
-  articles.value = []
-  afficherSucces.value = true
+const confirmerCommande = async () => {
+  if (articlesFiltres.value.length === 0) return
   
-  window.dispatchEvent(new Event('panier-mis-a-jour'))
+  loading.value = true
+  errorMsg.value = ''
   
-  setTimeout(() => {
-    afficherSucces.value = false
-  }, 3000)
+  try {
+    const orderItems = articlesFiltres.value.map(art => {
+      let prodId = null
+      if (typeof art.productId === 'number') {
+        prodId = art.productId
+      } else if (typeof art.id === 'number' && art.id < 1e12) {
+        prodId = art.id
+      }
+      
+      return {
+        product_id: prodId,
+        nom: art.nom,
+        vendeur: art.vendeur,
+        prix: art.prix,
+        tag: art.tag || 'Autre',
+        image: art.image || null,
+        type: art.type || 'acheter'
+      }
+    })
+    
+    await api.post('/orders', {
+      total: totalPrix.value,
+      items: orderItems
+    })
+    
+    const filteredIds = new Set(articlesFiltres.value.map(art => art.id))
+    articles.value = articles.value.filter(art => !filteredIds.has(art.id))
+    localStorage.setItem('panier', JSON.stringify(articles.value))
+    chargerPanier()
+    
+    afficherSucces.value = true
+    
+    setTimeout(() => {
+      afficherSucces.value = false
+    }, 3000)
+  } catch (error) {
+    errorMsg.value = error.response?.data?.message || "Une erreur est survenue lors de la validation."
+    console.error('Checkout error:', error)
+    setTimeout(() => {
+      errorMsg.value = ''
+    }, 4000)
+  } finally {
+    loading.value = false
+  }
 }
 
 onMounted(chargerPanier)
@@ -492,6 +555,28 @@ onMounted(chargerPanier)
   box-shadow: 0 4px 20px rgba(0,0,0,0.2);
   z-index: 999;
   font-family: 'Georgia', serif;
+}
+
+/* Error Toast */
+.error-toast {
+  position: fixed;
+  top: 25px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #f44336;
+  color: white;
+  padding: 14px 35px;
+  border-radius: 30px;
+  font-size: 16px;
+  font-weight: bold;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+  z-index: 999;
+  font-family: 'Georgia', serif;
+}
+
+.btn-confirmer:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* Toast Transitions */

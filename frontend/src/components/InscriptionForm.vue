@@ -5,23 +5,28 @@
     <div class="inscription-form">
       <h3>Créer un compte</h3>
       <form @submit.prevent="soumettre">
-        <input type="text" v-model="form.nom" placeholder="Nom complet">
-        <input type="email" v-model="form.email" placeholder="Adresse email">
-        <input type="password" v-model="form.motDePasse" placeholder="Mot de passe">
+        <input type="text" v-model="form.nom" placeholder="Nom complet" required>
+        <input type="email" v-model="form.email" placeholder="Adresse email" required>
+        <input type="password" v-model="form.motDePasse" placeholder="Mot de passe" required>
         <select v-model="form.role">
           <option value="">Je suis...</option>
           <option value="acheteur">Acheteuse</option>
           <option value="vendeur">Vendeuse</option>
           <option value="les-deux">Les deux</option>
         </select>
-        <button type="submit">S'inscrire gratuitement</button>
+        <button type="submit" :disabled="loading">
+          {{ loading ? "Inscription en cours..." : "S'inscrire gratuitement" }}
+        </button>
       </form>
+      <div v-if="successMsg" class="success-alert">{{ successMsg }}</div>
+      <div v-if="errorMsg" class="error-alert">{{ errorMsg }}</div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { reactive } from 'vue'
+import { reactive, ref } from 'vue'
+import api from '../services/axios.js'
 
 const form = reactive({
   nom: '',
@@ -30,9 +35,44 @@ const form = reactive({
   role: ''
 })
 
-function soumettre() {
-  // TODO: brancher sur l'API d'inscription
-  console.log('Inscription :', { ...form })
+const successMsg = ref('')
+const errorMsg = ref('')
+const loading = ref(false)
+
+async function soumettre() {
+  successMsg.value = ''
+  errorMsg.value = ''
+  
+  if (!form.nom || !form.email || !form.motDePasse) {
+    errorMsg.value = 'Veuillez remplir tous les champs obligatoires.'
+    return
+  }
+  
+  loading.value = true
+  try {
+    const response = await api.post('/register', {
+      name: form.nom,
+      email: form.email,
+      password: form.motDePasse,
+      role: form.role || 'acheteur'
+    })
+    
+    localStorage.setItem('auth_token', response.data.access_token)
+    localStorage.setItem('user', JSON.stringify(response.data.user))
+    
+    successMsg.value = 'Compte créé avec succès !'
+    
+    // Reset form
+    form.nom = ''
+    form.email = ''
+    form.motDePasse = ''
+    form.role = ''
+  } catch (error) {
+    errorMsg.value = error.response?.data?.message || "Une erreur est survenue lors de l'inscription."
+    console.error('Registration error:', error)
+  } finally {
+    loading.value = false
+  }
 }
 </script>
 
@@ -103,4 +143,25 @@ function soumettre() {
 }
 
 .inscription-form button:hover { opacity: 0.9; }
+.inscription-form button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.success-alert {
+  color: #2e7d32;
+  background-color: #edf7ed;
+  padding: 12px;
+  border-radius: 10px;
+  margin-top: 15px;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.error-alert {
+  color: #c62828;
+  background-color: #fde8e8;
+  padding: 12px;
+  border-radius: 10px;
+  margin-top: 15px;
+  font-size: 14px;
+  font-weight: bold;
+}
 </style>
